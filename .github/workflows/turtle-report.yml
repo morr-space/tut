@@ -2,8 +2,7 @@ name: Turtle Report
 
 on:
   schedule:
-    - cron: "50 8 * * 1-5"
-      timezone: "Asia/Seoul"
+    - cron: "0 12 * * 1-5" # 한국시간 평일 21:00
   workflow_dispatch:
 
 jobs:
@@ -22,7 +21,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Send Turtle report
+      - name: Run report
         env:
           EMAIL_USER: ${{ secrets.EMAIL_USER }}
           EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
