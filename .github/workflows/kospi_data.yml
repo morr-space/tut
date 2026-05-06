@@ -1,30 +1,32 @@
 name: Fetch KOSPI Data
 
 on:
-  workflow_dispatch:  # Trigger manually
+  workflow_dispatch:  # 수동으로 실행
   schedule:
-    - cron: "0 9 * * 1-5"  # 매일 오전 9시에 자동 실행 (한국 시간 기준 조정 필요)
+    - cron: "0 9 * * 1-5"  # 월-금 오전 9시 (UTC 기준)
 
 jobs:
   fetch-kospi:
     runs-on: ubuntu-latest
 
     steps:
-      # Checkout the repository
+      # 1. 저장소 코드 불러오기
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      # Setup Python
+      # 2. Python 3.10 설치
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: 3.9
+          python-version: 3.10
 
-      # Install dependencies
+      # 3. 의존성 설치 및 FinanceDataReader 설치
       - name: Install Dependencies
         run: |
-          pip install FinanceDataReader
+          pip install --upgrade pip
+          pip install pandas lxml numpy requests
+          pip install FinanceDataReader --default-timeout=100 -i https://pypi.org/simple
 
-      # Run the script
+      # 4. KOSPI 데이터 스크립트 실행
       - name: Run KOSPI Script
         run: python kospi_today.py
