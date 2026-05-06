@@ -15,7 +15,7 @@ EMAIL_TO = os.environ.get("EMAIL_TO", EMAIL_USER)
 
 MARKET = "KOSDAQ"
 MARKET_INDEX = "KQ11"
-TEST_MODE = True
+TEST_MODE = False
 
 TEST_CODES = [
     "247540",  # 에코프로비엠
