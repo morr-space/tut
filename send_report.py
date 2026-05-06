@@ -13,8 +13,8 @@ EMAIL_USER = os.environ["EMAIL_USER"]
 EMAIL_PASS = os.environ["EMAIL_PASS"]
 EMAIL_TO = os.environ.get("EMAIL_TO", EMAIL_USER)
 
-# 처음에는 테스트 종목만 돌리기
-TEST_MODE = True
+# 테스트 성공 후 전체 KOSPI로 실행
+TEST_MODE = False
 
 TEST_CODES = [
     "005930",  # 삼성전자
@@ -23,6 +23,23 @@ TEST_CODES = [
     "035420",  # NAVER
     "005380",  # 현대차
 ]
+
+
+def get_latest_market_date():
+    end = datetime.now()
+    start = end - timedelta(days=10)
+
+    df = fdr.DataReader("KS11", start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d"))
+
+    if df.empty:
+        raise ValueError("KOSPI 지수 데이터를 가져오지 못했습니다.")
+
+    return df.index[-1].strftime("%Y-%m-%d")
+
+
+def is_today_market_data(latest_market_date):
+    today = datetime.now().strftime("%Y-%m-%d")
+    return latest_market_date == today
 
 
 def get_kospi_stocks():
@@ -37,7 +54,7 @@ def get_kospi_stocks():
 
 def get_price_data(code):
     end = datetime.now()
-    start = end - timedelta(days=120)
+    start = end - timedelta(days=140)
 
     df = fdr.DataReader(code, start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d"))
 
@@ -81,6 +98,7 @@ def find_long_entry_signals():
 
         try:
             df = get_price_data(code)
+
             if df is None:
                 continue
 
@@ -117,7 +135,7 @@ def fmt(value, digits=2):
     return f"{value:,.{digits}f}"
 
 
-def send_email(signals, errors, total_count):
+def send_email(signals, errors, total_count, latest_market_date):
     run_date = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     if signals:
@@ -155,6 +173,7 @@ def send_email(signals, errors, total_count):
       <h2>📈 Turtle Long Entry Report</h2>
 
       <p><b>실행 시각:</b> {run_date}</p>
+      <p><b>기준 거래일:</b> {latest_market_date}</p>
       <p><b>검사 종목 수:</b> {total_count}</p>
       <p><b>Long Entry 발생:</b> {len(signals)}건</p>
 
@@ -177,7 +196,7 @@ def send_email(signals, errors, total_count):
     </html>
     """
 
-    subject = f"[Turtle] Long Entry {len(signals)}건 - {datetime.now().strftime('%Y-%m-%d')}"
+    subject = f"[Turtle] {latest_market_date} Long Entry {len(signals)}건"
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
@@ -192,5 +211,10 @@ def send_email(signals, errors, total_count):
 
 
 if __name__ == "__main__":
-    signals, errors, total_count = find_long_entry_signals()
-    send_email(signals, errors, total_count)
+    latest_market_date = get_latest_market_date()
+
+    if not is_today_market_data(latest_market_date):
+        print(f"오늘 장 데이터 없음. latest_market_date={latest_market_date}")
+    else:
+        signals, errors, total_count = find_long_entry_signals()
+        send_email(signals, errors, total_count, latest_market_date)
