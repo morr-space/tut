@@ -1,6 +1,10 @@
 name: Turtle Report
 
 on:
+  schedule:
+    # 한국시간 평일 21:00 = UTC 12:00
+    - cron: "0 12 * * 1-5"
+
   workflow_dispatch:
 
 jobs:
