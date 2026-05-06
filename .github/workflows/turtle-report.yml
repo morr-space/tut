@@ -1,6 +1,9 @@
 name: Turtle Report
 
 on:
+  schedule:
+    - cron: "0 21 * * 1-5"
+      timezone: "Asia/Seoul"
   workflow_dispatch:
 
 jobs:
