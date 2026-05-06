@@ -12,8 +12,7 @@ EMAIL_PASS = os.environ["EMAIL_PASS"]
 EMAIL_TO = os.environ.get("EMAIL_TO", EMAIL_USER)
 
 
-def get_kospi_today():
-    # 최근 며칠 데이터를 가져와야 휴장/주말에도 마지막 거래일 데이터를 안전하게 읽을 수 있음
+def get_kospi_latest():
     end = datetime.now()
     start = end - timedelta(days=10)
 
@@ -26,7 +25,6 @@ def get_kospi_today():
     latest_date = df.index[-1].strftime("%Y-%m-%d")
 
     prev_close = df.iloc[-2]["Close"] if len(df) >= 2 else None
-
     change = latest["Close"] - prev_close if prev_close is not None else None
     change_rate = (change / prev_close) * 100 if prev_close else None
 
@@ -42,14 +40,14 @@ def get_kospi_today():
     }
 
 
-def format_number(value, digits=2):
+def fmt(value, digits=2):
     if value is None:
         return "-"
     return f"{value:,.{digits}f}"
 
 
 def send_email(kospi):
-    today = datetime.now().strftime("%Y-%m-%d")
+    run_date = datetime.now().strftime("%Y-%m-%d")
 
     change_text = (
         "-"
@@ -61,7 +59,7 @@ def send_email(kospi):
     <html>
     <body style="font-family: Arial, sans-serif;">
       <h2>📈 KOSPI Daily Report</h2>
-      <p><b>실행일:</b> {today}</p>
+      <p><b>실행일:</b> {run_date}</p>
       <p><b>기준 거래일:</b> {kospi["date"]}</p>
 
       <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse;">
@@ -69,33 +67,14 @@ def send_email(kospi):
           <th>항목</th>
           <th>값</th>
         </tr>
-        <tr>
-          <td>종가</td>
-          <td>{format_number(kospi["close"])}</td>
-        </tr>
-        <tr>
-          <td>전일 대비</td>
-          <td>{change_text}</td>
-        </tr>
-        <tr>
-          <td>시가</td>
-          <td>{format_number(kospi["open"])}</td>
-        </tr>
-        <tr>
-          <td>고가</td>
-          <td>{format_number(kospi["high"])}</td>
-        </tr>
-        <tr>
-          <td>저가</td>
-          <td>{format_number(kospi["low"])}</td>
-        </tr>
-        <tr>
-          <td>거래량</td>
-          <td>{kospi["volume"]:,.0f}</td>
-        </tr>
+        <tr><td>종가</td><td>{fmt(kospi["close"])}</td></tr>
+        <tr><td>전일 대비</td><td>{change_text}</td></tr>
+        <tr><td>시가</td><td>{fmt(kospi["open"])}</td></tr>
+        <tr><td>고가</td><td>{fmt(kospi["high"])}</td></tr>
+        <tr><td>저가</td><td>{fmt(kospi["low"])}</td></tr>
+        <tr><td>거래량</td><td>{kospi["volume"]:,.0f}</td></tr>
       </table>
 
-      <br>
       <p style="color:gray;">GitHub Actions + FinanceDataReader 자동 발송</p>
     </body>
     </html>
@@ -114,5 +93,5 @@ def send_email(kospi):
 
 
 if __name__ == "__main__":
-    kospi = get_kospi_today()
+    kospi = get_kospi_latest()
     send_email(kospi)
