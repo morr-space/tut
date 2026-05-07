@@ -2,6 +2,7 @@ import os
 import smtplib
 import time
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -12,6 +13,8 @@ import pandas as pd
 EMAIL_USER = os.environ["EMAIL_USER"]
 EMAIL_PASS = os.environ["EMAIL_PASS"]
 EMAIL_TO = os.environ.get("EMAIL_TO", EMAIL_USER)
+
+KST = ZoneInfo("Asia/Seoul")
 
 MARKET = "KOSPI"
 MARKET_INDEX = "KS11"
@@ -29,42 +32,61 @@ PARAMS = {
 }
 
 
+def now_kst():
+    return datetime.now(KST)
+
+
 def get_latest_market_date():
-    end = datetime.now()
+    end = now_kst()
     start = end - timedelta(days=10)
     df = fdr.DataReader(MARKET_INDEX, start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d"))
+
     if df.empty:
         raise ValueError(f"{MARKET} 지수 데이터를 가져오지 못했습니다.")
+
     return df.index[-1].strftime("%Y-%m-%d")
 
 
 def is_today_market_data(latest_market_date):
-    return latest_market_date == datetime.now().strftime("%Y-%m-%d")
+    return latest_market_date == now_kst().strftime("%Y-%m-%d")
 
 
 def get_stocks():
-    stocks = fdr.StockListing(MARKET)[["Code", "Name", "Market"]].copy()
+    stocks = fdr.StockListing(MARKET).copy()
+
+    for col in ["Sector", "Industry", "Dept"]:
+        if col not in stocks.columns:
+            stocks[col] = "-"
+
+    stocks = stocks[["Code", "Name", "Market", "Sector", "Industry", "Dept"]].copy()
+
     if TEST_MODE:
         stocks = stocks[stocks["Code"].isin(TEST_CODES)].copy()
+
     return stocks
 
 
 def get_price_data(code):
-    end = datetime.now()
+    end = now_kst()
     start = end - timedelta(days=365 * 4)
     df = fdr.DataReader(code, start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d"))
+
     if df.empty or len(df) < 60:
         return None
+
     return df
 
 
 def calc_tr(df):
     prev_close = df["Close"].shift(1)
+
     tr1 = df["High"] - df["Low"]
     tr2 = (df["High"] - prev_close).abs()
     tr3 = (df["Low"] - prev_close).abs()
+
     tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
     tr.iloc[0] = df.iloc[0]["High"] - df.iloc[0]["Low"]
+
     return tr
 
 
@@ -90,11 +112,9 @@ def evaluate_step1(df):
     c1_listed_ok = listed_years >= PARAMS["listed_years_min"]
 
     return {
-        "close": close,
         "N": n_value,
         "N_ratio": n_ratio,
         "value_krw_20d_avg": value_krw_20d_avg,
-        "listed_years": listed_years,
         "C1_PASS": all([c1_price_ok, c1_nratio_ok, c1_value_ok, c1_listed_ok]),
     }
 
@@ -143,6 +163,9 @@ def find_long_entry_signals():
                 signals.append({
                     "code": code,
                     "name": name,
+                    "sector": row.get("Sector", "-"),
+                    "industry": row.get("Industry", "-"),
+                    "dept": row.get("Dept", "-"),
                     "date": signal["date"],
                     "close": signal["close"],
                     "hh55": signal["hh55"],
@@ -179,18 +202,21 @@ def fmt_elapsed(seconds):
 
 
 def send_email(signals, errors, total_count, step1_pass_count, latest_market_date, elapsed_seconds):
-    run_date = datetime.now().strftime("%Y-%m-%d %H:%M")
+    run_date = now_kst().strftime("%Y-%m-%d %H:%M")
 
-    if signals:
-        subject = f"🟢 [{MARKET} Turtle] {latest_market_date} Long Entry {len(signals)}건"
-    else:
-        subject = f"⚪ [{MARKET} Turtle] {latest_market_date} No Signal"
+    subject = (
+        f"🟢 [{MARKET} Turtle] {latest_market_date} Long Entry {len(signals)}건"
+        if signals
+        else f"⚪ [{MARKET} Turtle] {latest_market_date} No Signal"
+    )
 
     rows = "".join(
         f"""
         <tr>
           <td>{s["code"]}</td>
           <td>{s["name"]}</td>
+          <td>{s["sector"]}</td>
+          <td>{s["industry"]}</td>
           <td>{s["date"]}</td>
           <td style="text-align:right;">{fmt(s["close"])}</td>
           <td style="text-align:right;">{fmt(s["hh55"])}</td>
@@ -203,7 +229,7 @@ def send_email(signals, errors, total_count, step1_pass_count, latest_market_dat
         for s in signals
     ) if signals else """
         <tr>
-          <td colspan="9" style="text-align:center;">오늘 발생한 Long Entry 신호 없음</td>
+          <td colspan="11" style="text-align:center;">오늘 발생한 Long Entry 신호 없음</td>
         </tr>
     """
 
@@ -214,7 +240,7 @@ def send_email(signals, errors, total_count, step1_pass_count, latest_market_dat
     <body style="font-family: Arial, sans-serif;">
       <h2>📈 {MARKET} Turtle Long Entry Report</h2>
 
-      <p><b>실행 시각:</b> {run_date}</p>
+      <p><b>실행 시각(KST):</b> {run_date}</p>
       <p><b>기준 거래일:</b> {latest_market_date}</p>
       <p><b>전체 검사 종목 수:</b> {total_count}</p>
       <p><b>Step1 통과 종목 수:</b> {step1_pass_count}</p>
@@ -226,6 +252,8 @@ def send_email(signals, errors, total_count, step1_pass_count, latest_market_dat
         <tr style="background-color:#f2f2f2;">
           <th>종목코드</th>
           <th>종목명</th>
+          <th>섹터</th>
+          <th>업종</th>
           <th>기준일</th>
           <th>종가</th>
           <th>직전 55일 고가</th>
